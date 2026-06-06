@@ -1,0 +1,30 @@
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Compiled binaries
+application/backend/fabrictrace
+application/backend/nohup.out
+application/backend/tmp/
+
+# Frontend dependencies and builds
+application/web/node_modules/
+application/web/dist/
+
+# Blockchain runtime materials (already partially handled by sub-gitignores, but good to ensure here)
+blockchain/network/organizations/peerOrganizations/
+blockchain/network/organizations/ordererOrganizations/
+blockchain/network/organizations/fabric-ca/
+blockchain/network/channel-artifacts/
+blockchain/network/log.txt
+blockchain/network/*.tar.gz
+blockchain/network/bin/
+blockchain/chaincode/vendor/
+application/backend/blockchain/network/organizations/
+blockchain/tape/tape
+blockchain/tape/Tape.log
