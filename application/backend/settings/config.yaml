@@ -1,24 +1,12 @@
 app:
-  name: "fabricTraceServer"
+  name: "oil-supervision-server"
   mode: "dev"
   port: 9090
-  salt: "testsalt"
 jwt:
-  secret: "testsecret"
-  issuer: "fabricTraceServer"
+  secret: "oil-supervision-local-secret-2026"
 mysql:
   host: "127.0.0.1"
   port: 3337
-  user: "root"  
-  password : "fabrictrace"
-  charset: "utf8mb4"
-  db : "fabrictrace"
-  
-# mysql:
-#   host: "127.0.0.1"
-#   port: 3337
-#   user: "root"  
-#   password : "fabrictrace"
-#   charset: "utf8mb4"
-#   db : "fabrictrace"
-  
+  user: "root"
+  password: "oiltrace"
+  db: "oil_supervision"

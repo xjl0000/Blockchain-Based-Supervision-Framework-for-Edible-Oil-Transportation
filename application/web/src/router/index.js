@@ -1,204 +1,47 @@
 import Vue from 'vue'
 import Router from 'vue-router'
-
-Vue.use(Router)
-
-/* Layout */
 import Layout from '@/layout'
 
-/**
- * Note: sub-menu only appear when route children.length >= 1
- * Detail see: https://panjiachen.github.io/vue-element-admin-site/guide/essentials/router-and-nav.html
- *
- * hidden: true                   if set true, item will not show in the sidebar(default is false)
- * alwaysShow: true               if set true, will always show the root menu
- *                                if not set alwaysShow, when item has more than one children route,
- *                                it will becomes nested mode, otherwise not show the root menu
- * redirect: noRedirect           if set noRedirect will no redirect in the breadcrumb
- * name:'router-name'             the name is used by <keep-alive> (must set!!!)
- * meta : {
-    roles: ['admin','editor']    control the page roles (you can set multiple roles)
-    title: 'title'               the name show in sidebar and breadcrumb (recommend set)
-    icon: 'svg-name'/'el-icon-x' the icon show in the sidebar
-    breadcrumb: false            if set false, the item will hidden in breadcrumb(default is true)
-    activeMenu: '/example/list'  if set path, the sidebar will highlight the path you set
-  }
- */
+Vue.use(Router)
+const all = ['原料供应商', '榨油厂', '运输人员', '零售商', '监管机构', '系统管理员']
+const businessRoles = ['原料供应商', '榨油厂', '运输人员', '零售商', '监管机构']
 
-/**
- * constantRoutes
- * a base page that does not have permission requirements
- * all roles can be accessed
- */
 export const constantRoutes = [
-  {
-    path: '/login',
-    component: () => import('@/views/login/index'),
-    hidden: true
-  },
-
-  {
-    path: '/404',
-    component: () => import('@/views/404'),
-    hidden: true
-  },
-
-  {
-    path: '/',
-    component: Layout,
-    redirect: '/uplink',
-    children: [{
-      path: 'uplink',
-      name: 'Uplink',
-      component: () => import('@/views/uplink/index'),
-      meta: { title: '溯源信息录入', icon: 'el-icon-edit-outline' }
-    }]
-  },
-
-  {
-    path: '/trace',
-    component: Layout,
-    children: [{
-      path: 'trace',
-      name: 'Trace',
-      component: () => import('@/views/trace/index'),
-      meta: { title: '溯源查询', icon: 'el-icon-search' }
-    }]
-  },
- 
-
-  // {
-  //   path: '/example',
-  //   component: Layout,
-  //   redirect: '/example/table',
-  //   name: 'Example',
-  //   meta: { title: 'Example', icon: 'el-icon-s-help' },
-  //   children: [
-  //     {
-  //       path: 'table',
-  //       name: 'Table',
-  //       component: () => import('@/views/table/index'),
-  //       meta: { title: 'Table', icon: 'table' }
-  //     },
-  //     {
-  //       path: 'tree',
-  //       name: 'Tree',
-  //       component: () => import('@/views/tree/index'),
-  //       meta: { title: 'Tree', icon: 'tree' }
-  //     }
-  //   ]
-  // },
-  //
-  // {
-  //   path: '/form',
-  //   component: Layout,
-  //   children: [
-  //     {
-  //       path: 'index',
-  //       name: 'Form',
-  //       component: () => import('@/views/form/index'),
-  //       meta: { title: 'Form', icon: 'form' }
-  //     }
-  //   ]
-  // },
-  //
-  // {
-  //   path: '/nested',
-  //   component: Layout,
-  //   redirect: '/nested/menu1',
-  //   name: 'Nested',
-  //   meta: {
-  //     title: 'Nested',
-  //     icon: 'nested'
-  //   },
-  //   children: [
-  //     {
-  //       path: 'menu1',
-  //       component: () => import('@/views/nested/menu1/index'), // Parent router-view
-  //       name: 'Menu1',
-  //       meta: { title: 'Menu1' },
-  //       children: [
-  //         {
-  //           path: 'menu1-1',
-  //           component: () => import('@/views/nested/menu1/menu1-1'),
-  //           name: 'Menu1-1',
-  //           meta: { title: 'Menu1-1' }
-  //         },
-  //         {
-  //           path: 'menu1-2',
-  //           component: () => import('@/views/nested/menu1/menu1-2'),
-  //           name: 'Menu1-2',
-  //           meta: { title: 'Menu1-2' },
-  //           children: [
-  //             {
-  //               path: 'menu1-2-1',
-  //               component: () => import('@/views/nested/menu1/menu1-2/menu1-2-1'),
-  //               name: 'Menu1-2-1',
-  //               meta: { title: 'Menu1-2-1' }
-  //             },
-  //             {
-  //               path: 'menu1-2-2',
-  //               component: () => import('@/views/nested/menu1/menu1-2/menu1-2-2'),
-  //               name: 'Menu1-2-2',
-  //               meta: { title: 'Menu1-2-2' }
-  //             }
-  //           ]
-  //         },
-  //         {
-  //           path: 'menu1-3',
-  //           component: () => import('@/views/nested/menu1/menu1-3'),
-  //           name: 'Menu1-3',
-  //           meta: { title: 'Menu1-3' }
-  //         }
-  //       ]
-  //     },
-  //     {
-  //       path: 'menu2',
-  //       component: () => import('@/views/nested/menu2/index'),
-  //       name: 'Menu2',
-  //       meta: { title: 'menu2' }
-  //     }
-  //   ]
-  // },
-
-  {
-    path: 'external-link',
-    component: Layout,
-    children: [
-      {
-        path: 'http://192.168.1.6:8080',
-        meta: { title: '区块链浏览器', icon: 'el-icon-discover' }
-      }
-    ]
-  },
-  // {
-  //   path: '/',
-  //   component: Layout,
-  //   redirect: '/build',
-  //   children: [{
-  //     path: 'build',
-  //     name: 'Build',
-  //     component: () => import('@/views/build/index'),
-  //     meta: { title: '构建任意溯源系统', icon: 'el-icon-s-tools' }
-  //   }]
-  // },
-
-  // 404 page must be placed at the end !!!
+  { path: '/login', component: () => import('@/views/login/index'), hidden: true },
+  { path: '/404', component: () => import('@/views/404'), hidden: true },
+  { path: '/forbidden', component: Layout, hidden: true, children: [
+    { path: '', name: 'Forbidden', component: () => import('@/views/forbidden/index'), meta: { title: '权限提示' }}
+  ] },
+  { path: '/', component: Layout, redirect: '/dashboard', children: [
+    { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/dashboard/index'), meta: { title: '主界面', icon: 'dashboard', roles: all }}
+  ] },
+  { path: '/raw-material', component: Layout, children: [
+    { path: 'index', name: 'RawMaterial', component: () => import('@/views/batches/index'), meta: { title: '原材料管理', icon: 'form', roles: ['原料供应商'] }}
+  ] },
+  { path: '/pressing', component: Layout, children: [
+    { path: 'index', name: 'Pressing', component: () => import('@/views/pressing/index'), meta: { title: '食用油压榨管理', icon: 'el-icon-office-building', roles: ['榨油厂'] }}
+  ] },
+  { path: '/transport', component: Layout, children: [
+    { path: 'index', name: 'Transport', component: () => import('@/views/transport/index'), meta: { title: '运输管理', icon: 'el-icon-truck', roles: ['运输人员'] }}
+  ] },
+  { path: '/retail', component: Layout, children: [
+    { path: 'index', name: 'Retail', component: () => import('@/views/retail/index'), meta: { title: '零售管理', icon: 'el-icon-shopping-bag-2', roles: ['零售商'] }}
+  ] },
+  { path: '/trace', component: Layout, children: [
+    { path: 'index', name: 'Trace', component: () => import('@/views/trace/index'), meta: { title: '产品全流程追溯', icon: 'el-icon-search', roles: businessRoles }}
+  ] },
+  { path: '/evidence', component: Layout, children: [
+    { path: 'index', name: 'Evidence', component: () => import('@/views/evidence/index'), meta: { title: '区块链存证查询', icon: 'el-icon-connection', roles: businessRoles }}
+  ] },
+  { path: '/admin/users', component: Layout, children: [
+    { path: 'index', name: 'Users', component: () => import('@/views/admin/users'), meta: { title: '用户账号管理', icon: 'user', roles: ['系统管理员'] }}
+  ] },
+  { path: '/admin/logs', component: Layout, children: [
+    { path: 'index', name: 'Logs', component: () => import('@/views/admin/logs'), meta: { title: '系统日志', icon: 'table', roles: ['系统管理员'] }}
+  ] },
   { path: '*', redirect: '/404', hidden: true }
 ]
-
-const createRouter = () => new Router({
-  // mode: 'history', // require service support
-  scrollBehavior: () => ({ y: 0 }),
-  routes: constantRoutes
-})
-
+const createRouter = () => new Router({ scrollBehavior: () => ({ y: 0 }), routes: constantRoutes })
 const router = createRouter()
-
-// Detail see: https://github.com/vuejs/vue-router/issues/1234#issuecomment-357941465
-export function resetRouter() {
-  const newRouter = createRouter()
-  router.matcher = newRouter.matcher // reset router
-}
-
+export function resetRouter() { router.matcher = createRouter().matcher }
 export default router

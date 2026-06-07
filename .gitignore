@@ -9,6 +9,9 @@
 
 # Compiled binaries
 application/backend/fabrictrace
+application/backend/oil-supervision-server.exe
+application/backend/oil-supervision-server-verify.exe
+application/backend/oil-supervision-server-verify.exe~
 application/backend/nohup.out
 application/backend/tmp/
 

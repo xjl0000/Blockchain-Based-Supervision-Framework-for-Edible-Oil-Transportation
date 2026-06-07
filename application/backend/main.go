@@ -5,23 +5,21 @@ import (
 	"backend/router"
 	setting "backend/settings"
 	"fmt"
+	"log"
 
 	"github.com/spf13/viper"
 )
 
 func main() {
-	// 加载配置文件
 	if err := setting.Init(); err != nil {
-		fmt.Printf("init settings failed,err:%v\n", err)
+		log.Fatalf("加载配置失败: %v", err)
 	}
-	// 初始化数据库
-	if err := pkg.MysqlInit(); err != nil {
-		fmt.Printf("init mysql failed,err:%v\n", err)
+	if err := pkg.InitDB(); err != nil {
+		log.Fatalf("初始化 MySQL 失败: %v", err)
 	}
-	// 注册路由
-	r := router.SetupRouter()
-
-	// 启动服务
-	r.Run(fmt.Sprintf(":%d", viper.GetInt("app.port")))
-
+	addr := fmt.Sprintf(":%d", viper.GetInt("app.port"))
+	log.Printf("食用油运输监管系统后端已启动: http://localhost%s", addr)
+	if err := router.SetupRouter().Run(addr); err != nil {
+		log.Fatal(err)
+	}
 }

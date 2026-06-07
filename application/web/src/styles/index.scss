@@ -63,3 +63,16 @@ div:focus {
 .app-container {
   padding: 20px;
 }
+
+.page { padding: 24px; background: #f4f7fa; min-height: calc(100vh - 50px); }
+.page-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.page-head h2 { margin:0 0 7px; color:#203442; font-size:22px; }
+.page-head p { margin:0; color:#7a8a96; font-size:13px; }
+.panel { background:#fff; border-radius:8px; padding:22px; margin-top:20px; box-shadow:0 2px 12px rgba(24,54,78,.06); }
+.panel-title { font-size:17px; font-weight:700; color:#294657; margin-bottom:20px; border-left:4px solid #409eff; padding-left:10px; }
+.hero { display:flex; justify-content:space-between; align-items:center; padding:28px 32px; color:#fff; background:linear-gradient(120deg,#24526b,#277e82); border-radius:10px; box-shadow:0 8px 24px rgba(25,85,102,.2); }
+.hero h1 { margin:10px 0; font-size:25px; }.hero p{margin:0;color:#d3e7e8}.eyebrow{font-size:12px;padding:5px 10px;border:1px solid rgba(255,255,255,.4);border-radius:15px}
+.chain-badge{display:flex;flex-direction:column;align-items:center;padding:18px 30px;background:rgba(255,255,255,.12);border-radius:8px}.chain-badge i{font-size:34px}.chain-badge b{margin:8px}.chain-badge span{font-size:12px;color:#cce7dc}
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:20px}.metric{background:#fff;border-radius:8px;padding:20px;display:flex;align-items:center;box-shadow:0 2px 12px rgba(24,54,78,.06)}.metric i{font-size:30px;color:#3f8e91;margin-right:15px}.metric b{display:block;font-size:25px;color:#263d4a}.metric span{display:block;color:#84939d;font-size:12px;margin-top:5px}
+.role-note{margin-top:25px;padding:16px;background:#f3f8f9;border-radius:6px;color:#526974}.trace-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}.trace-summary div{background:#fff;padding:18px;border-radius:8px}.trace-summary span,.trace-summary b{display:block}.trace-summary span{color:#8a99a3;font-size:12px}.trace-summary b{margin-top:8px;color:#2b4c5d}.system-bar{display:flex;gap:30px;padding:16px;background:#edf8f2;color:#35845b;border-radius:8px;margin-bottom:18px}code{color:#28748a;font-size:12px}pre{white-space:pre-wrap;margin:0;font-family:inherit}
+@media(max-width:1100px){.cards{grid-template-columns:repeat(3,1fr)}}

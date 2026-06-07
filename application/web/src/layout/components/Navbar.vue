@@ -4,9 +4,9 @@
 
     <breadcrumb class="breadcrumb-container" />
     <div class="right-menu">
-      <el-dropdown class="avatar-container" trigger="click">
-        <div class="avatar-wrapper">
-          <img src="@/assets/log.png" class="user-avatar">
+      <el-dropdown class="user-container" trigger="click">
+        <div class="user-wrapper">
+          <span class="identity">{{ name }} · {{ role }}</span>
           <i class="el-icon-caret-bottom" />
         </div>
         <el-dropdown-menu slot="dropdown" class="user-dropdown">
@@ -33,7 +33,8 @@ export default {
   computed: {
     ...mapGetters([
       'sidebar',
-      'avatar'
+      'name',
+      'role'
     ])
   },
   methods: {
@@ -101,8 +102,29 @@ export default {
       }
     }
 
-    .avatar-container {
+    .user-container {
       margin-right: 30px;
+      cursor: pointer;
+
+      .user-wrapper {
+        display: flex;
+        align-items: center;
+        height: 50px;
+        color: #536471;
+
+        &:hover {
+          color: #409eff;
+        }
+      }
+
+      i {
+        margin-left: 6px;
+        font-size: 12px;
+      }
+    }
+
+    .identity {
+      font-size: 13px;
     }
   }
 }

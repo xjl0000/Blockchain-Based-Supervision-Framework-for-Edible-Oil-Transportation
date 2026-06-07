@@ -65,7 +65,6 @@ export const constantRoutes = [
       meta: { title: '溯源查询', icon: 'el-icon-search' }
     }]
   },
- 
 
   // {
   //   path: '/example',

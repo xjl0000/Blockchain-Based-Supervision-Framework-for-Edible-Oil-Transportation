@@ -4,6 +4,9 @@ const getters = {
   token: state => state.user.token,
   avatar: state => state.user.avatar,
   name: state => state.user.name,
-  userType: state => state.user.userType
+  username: state => state.user.username,
+  role: state => state.user.role,
+  userType: state => state.user.role,
+  organization: state => state.user.organization
 }
 export default getters

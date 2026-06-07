@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: oil-supervision-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: oiltrace
+      TZ: Asia/Shanghai
+    ports:
+      - "3337:3306"
+    volumes:
+      - oil-supervision-mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-poiltrace"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  oil-supervision-mysql-data:

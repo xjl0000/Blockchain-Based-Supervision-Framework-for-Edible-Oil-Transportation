@@ -1,6 +1,6 @@
 module.exports = {
 
-  title: '农产品溯源系统',
+  title: '食用油运输监管系统',
 
   /**
    * @type {boolean} true | false
@@ -12,5 +12,5 @@ module.exports = {
    * @type {boolean} true | false
    * @description Whether show the logo in sidebar
    */
-  sidebarLogo: false
+  sidebarLogo: true
 }
