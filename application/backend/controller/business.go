@@ -117,7 +117,9 @@ func SubmitBatch(c *gin.Context) {
 		fail(c, 400, "当前批次无法提交")
 		return
 	}
-	_ = pkg.CreateEvidence(req.ID, "原料批次存证", "原料供应商提交原料批次信息", userID(c), role(c))
+	if !createEvidenceOrFail(c, req.ID, "原料批次存证", "原料供应商提交原料批次信息") {
+		return
+	}
 	logAction(c, "提交原料批次", strconv.FormatInt(req.ID, 10))
 	ok(c, gin.H{"message": "原料信息已提交存证，等待榨油厂接收"})
 }
@@ -135,7 +137,9 @@ func FactoryDecision(c *gin.Context) {
 			fail(c, 400, "当前批次无法接收")
 			return
 		}
-		_ = pkg.CreateEvidence(req.ID, "原料接收存证", "榨油厂确认接收原料", userID(c), role(c))
+		if !createEvidenceOrFail(c, req.ID, "原料接收存证", "榨油厂确认接收原料") {
+			return
+		}
 		logAction(c, "确认原料接收", req.Reason)
 		ok(c, gin.H{"message": "已确认接收原料"})
 		return
@@ -146,7 +150,9 @@ func FactoryDecision(c *gin.Context) {
 		return
 	}
 	_, _ = pkg.DB.Exec("INSERT INTO rejection_records(batch_id,stage,reason,operator_id) VALUES(?,'原料接收',?,?)", req.ID, req.Reason, userID(c))
-	_ = pkg.CreateEvidence(req.ID, "原料拒收存证", "榨油厂拒收原料："+req.Reason, userID(c), role(c))
+	if !createEvidenceOrFail(c, req.ID, "原料拒收存证", "榨油厂拒收原料："+req.Reason) {
+		return
+	}
 	ok(c, gin.H{"message": "批次已退回原料供应商"})
 }
 
@@ -162,7 +168,9 @@ func SubmitProcessing(c *gin.Context) {
 		fail(c, 400, "当前批次无法提交加工信息")
 		return
 	}
-	_ = pkg.CreateEvidence(req.ID, "加工生产存证", "榨油厂提交加工生产信息", userID(c), role(c))
+	if !createEvidenceOrFail(c, req.ID, "加工生产存证", "榨油厂提交加工生产信息") {
+		return
+	}
 	logAction(c, "提交加工信息", strconv.FormatInt(req.ID, 10))
 	ok(c, gin.H{"message": "加工生产信息已提交存证"})
 }
@@ -199,7 +207,9 @@ func CreateTransport(c *gin.Context) {
 	}
 	_ = tx.Commit()
 	taskID, _ := res.LastInsertId()
-	_ = pkg.CreateEvidence(req.BatchID, "运输任务存证", "榨油厂发起运输任务", userID(c), role(c))
+	if !createEvidenceOrFail(c, req.BatchID, "运输任务存证", "榨油厂发起运输任务") {
+		return
+	}
 	logAction(c, "发起运输任务", strconv.FormatInt(taskID, 10))
 	ok(c, gin.H{"message": "运输任务已发起", "task_id": taskID})
 }
@@ -253,14 +263,18 @@ func TransportDecision(c *gin.Context) {
 	if req.Accept {
 		_, _ = pkg.DB.Exec("UPDATE transport_tasks SET status='accepted' WHERE id=?", req.ID)
 		_, _ = pkg.DB.Exec("UPDATE batches SET status='transport_accepted' WHERE id=?", batchID)
-		_ = pkg.CreateEvidence(batchID, "运输接收存证", "运输人员确认接收任务", userID(c), role(c))
+		if !createEvidenceOrFail(c, batchID, "运输接收存证", "运输人员确认接收任务") {
+			return
+		}
 		ok(c, gin.H{"message": "已接收运输任务"})
 		return
 	}
 	_, _ = pkg.DB.Exec("DELETE FROM transport_tasks WHERE id=?", req.ID)
 	_, _ = pkg.DB.Exec("UPDATE batches SET status='processed' WHERE id=?", batchID)
 	_, _ = pkg.DB.Exec("INSERT INTO rejection_records(batch_id,stage,reason,operator_id) VALUES(?,'运输任务',?,?)", batchID, req.Reason, userID(c))
-	_ = pkg.CreateEvidence(batchID, "运输任务退回存证", "运输人员退回运输任务："+req.Reason, userID(c), role(c))
+	if !createEvidenceOrFail(c, batchID, "运输任务退回存证", "运输人员退回运输任务："+req.Reason) {
+		return
+	}
 	ok(c, gin.H{"message": "运输任务已退回榨油厂"})
 }
 
@@ -274,7 +288,9 @@ func StartTransport(c *gin.Context) {
 	}
 	_, _ = pkg.DB.Exec("UPDATE transport_tasks SET status='in_transit',started_at=NOW() WHERE id=?", req.ID)
 	_, _ = pkg.DB.Exec("UPDATE batches SET status='in_transit' WHERE id=?", batchID)
-	_ = pkg.CreateEvidence(batchID, "运输启运存证", "运输人员开始运输", userID(c), role(c))
+	if !createEvidenceOrFail(c, batchID, "运输启运存证", "运输人员开始运输") {
+		return
+	}
 	ok(c, gin.H{"message": "运输已开始"})
 }
 
@@ -306,7 +322,9 @@ func GenerateNodes(c *gin.Context) {
 		humidity := 52 + math.Cos(float64(i))*3.5
 		_, _ = pkg.DB.Exec("INSERT INTO transport_nodes(task_id,seq,longitude,latitude,temperature,humidity) VALUES(?,?,?,?,?,?)", req.ID, current+i+1, point.Lng, point.Lat, temp, humidity)
 	}
-	_ = pkg.CreateEvidence(batchID, "运输过程存证", fmt.Sprintf("运输人员上传%d条GPS及温湿度记录", req.Count), userID(c), role(c))
+	if !createEvidenceOrFail(c, batchID, "运输过程存证", fmt.Sprintf("运输人员上传%d条GPS及温湿度记录", req.Count)) {
+		return
+	}
 	ok(c, gin.H{"message": "运输定位与温湿度数据已更新"})
 }
 
@@ -320,7 +338,9 @@ func CompleteTransport(c *gin.Context) {
 	}
 	_, _ = pkg.DB.Exec("UPDATE transport_tasks SET status='pending_retail',completed_at=NOW() WHERE id=?", req.ID)
 	_, _ = pkg.DB.Exec("UPDATE batches SET status='pending_retail' WHERE id=?", batchID)
-	_ = pkg.CreateEvidence(batchID, "运输完成存证", "运输任务完成，等待零售商收货", userID(c), role(c))
+	if !createEvidenceOrFail(c, batchID, "运输完成存证", "运输任务完成，等待零售商收货") {
+		return
+	}
 	ok(c, gin.H{"message": "运输已完成，等待零售商确认收货"})
 }
 
@@ -341,14 +361,18 @@ func RetailDecision(c *gin.Context) {
 		payload, _ := json.Marshal(req.Data)
 		_, _ = pkg.DB.Exec("UPDATE batches SET status='completed',receipt_data=? WHERE id=?", payload, req.BatchID)
 		_, _ = pkg.DB.Exec("UPDATE transport_tasks SET status='completed' WHERE id=?", taskID)
-		_ = pkg.CreateEvidence(req.BatchID, "零售收货存证", "零售商确认产品收货", userID(c), role(c))
+		if !createEvidenceOrFail(c, req.BatchID, "零售收货存证", "零售商确认产品收货") {
+			return
+		}
 		ok(c, gin.H{"message": "产品已确认收货，完整流程结束"})
 		return
 	}
 	_, _ = pkg.DB.Exec("UPDATE transport_tasks SET status='in_transit',completed_at=NULL WHERE id=?", taskID)
 	_, _ = pkg.DB.Exec("UPDATE batches SET status='in_transit' WHERE id=?", req.BatchID)
 	_, _ = pkg.DB.Exec("INSERT INTO rejection_records(batch_id,stage,reason,operator_id) VALUES(?,'零售收货',?,?)", req.BatchID, req.Reason, userID(c))
-	_ = pkg.CreateEvidence(req.BatchID, "零售退回存证", "零售商退回产品："+req.Reason, userID(c), role(c))
+	if !createEvidenceOrFail(c, req.BatchID, "零售退回存证", "零售商退回产品："+req.Reason) {
+		return
+	}
 	ok(c, gin.H{"message": "产品已退回运输环节"})
 }
 
@@ -367,7 +391,9 @@ func AddCorrection(c *gin.Context) {
 		fail(c, 500, err.Error())
 		return
 	}
-	_ = pkg.CreateEvidence(req.BatchID, "数据更正存证", req.Stage+"追加更正："+req.Reason, userID(c), role(c))
+	if !createEvidenceOrFail(c, req.BatchID, "数据更正存证", req.Stage+"追加更正："+req.Reason) {
+		return
+	}
 	ok(c, gin.H{"message": "更正记录已追加，原始存证保持不变"})
 }
 
@@ -394,7 +420,8 @@ func TraceDetail(c *gin.Context) {
 func ListEvidence(c *gin.Context) {
 	where, args := batchVisibilityClause(c, "b", false)
 	query := `SELECT e.id,b.trace_code,e.business_type,e.business_summary,e.data_hash,e.previous_hash,e.transaction_hash,e.block_hash,
-		e.operator_role,u.display_name,u.organization,e.created_at
+		e.operator_role,u.display_name,u.organization,e.created_at,
+		e.fabric_status,e.fabric_tx_id,e.fabric_block_number,e.event_id,e.confirmed_at,e.error_message,e.retry_count
 		FROM evidence_records e JOIN batches b ON b.id=e.batch_id JOIN users u ON u.id=e.operator_id` + where + ` ORDER BY b.id DESC,e.id`
 	rows, err := pkg.DB.Query(query, args...)
 	if err != nil {
@@ -404,11 +431,15 @@ func ListEvidence(c *gin.Context) {
 	defer rows.Close()
 	data := []gin.H{}
 	for rows.Next() {
-		var id int64
+		var id, fabricBlockNum int64
+		var retryCount int
 		var code, typ, summary, dataHash, prev, tx, block, r, operator, organization string
-		var created interface{}
-		_ = rows.Scan(&id, &code, &typ, &summary, &dataHash, &prev, &tx, &block, &r, &operator, &organization, &created)
-		data = append(data, gin.H{"id": id, "trace_code": code, "business_type": typ, "business_summary": summary, "data_hash": dataHash, "previous_hash": prev, "transaction_hash": tx, "block_hash": block, "operator_role": r, "operator_name": operator, "operator_organization": organization, "created_at": created})
+		var fabricStatus, fabricTxID, eventID string
+		var created, confirmedAt, errorMsg interface{}
+		_ = rows.Scan(&id, &code, &typ, &summary, &dataHash, &prev, &tx, &block, &r, &operator, &organization, &created,
+			&fabricStatus, &fabricTxID, &fabricBlockNum, &eventID, &confirmedAt, &errorMsg, &retryCount)
+		data = append(data, gin.H{"id": id, "trace_code": code, "business_type": typ, "business_summary": summary, "data_hash": dataHash, "previous_hash": prev, "transaction_hash": tx, "block_hash": block, "operator_role": r, "operator_name": operator, "operator_organization": organization, "created_at": created,
+			"fabric_status": fabricStatus, "fabric_tx_id": fabricTxID, "fabric_block_number": fabricBlockNum, "event_id": eventID, "confirmed_at": confirmedAt, "error_message": errorMsg, "retry_count": retryCount})
 	}
 	ok(c, gin.H{"data": data})
 }
@@ -447,6 +478,14 @@ func affected(res sql.Result) int64 {
 	n, _ := res.RowsAffected()
 	return n
 }
+
+func createEvidenceOrFail(c *gin.Context, batchID int64, businessType, summary string) bool {
+	if err := pkg.CreateEvidence(batchID, businessType, summary, userID(c), role(c)); err != nil {
+		fail(c, 500, "业务数据已写入，但创建区块链存证失败："+err.Error())
+		return false
+	}
+	return true
+}
 func batchByID(id int64) gin.H {
 	rows, _ := pkg.DB.Query(`SELECT b.id,b.trace_code,b.status,b.material_name,b.origin,b.quantity,b.unit,b.quality_grade,b.production_date,b.test_report,b.supplier_id,b.oil_factory_id,b.transporter_id,b.retailer_id,b.processing_data,b.receipt_data,b.created_at,b.updated_at,s.display_name,COALESCE(f.display_name,''),COALESCE(d.display_name,''),COALESCE(r.display_name,'') FROM batches b JOIN users s ON s.id=b.supplier_id LEFT JOIN users f ON f.id=b.oil_factory_id LEFT JOIN users d ON d.id=b.transporter_id LEFT JOIN users r ON r.id=b.retailer_id WHERE b.id=?`, id)
 	defer rows.Close()
@@ -457,16 +496,21 @@ func batchByID(id int64) gin.H {
 	return gin.H{}
 }
 func evidenceByBatch(id int64) []gin.H {
-	rows, _ := pkg.DB.Query(`SELECT e.business_type,e.business_summary,e.data_hash,e.previous_hash,e.transaction_hash,e.block_hash,
-		e.operator_role,u.display_name,u.organization,e.created_at
+	rows, _ := pkg.DB.Query(`SELECT e.id,e.business_type,e.business_summary,e.data_hash,e.previous_hash,e.transaction_hash,e.block_hash,
+		e.operator_role,u.display_name,u.organization,e.created_at,
+		e.fabric_status,e.fabric_tx_id,e.fabric_block_number,e.event_id,e.confirmed_at
 		FROM evidence_records e JOIN users u ON u.id=e.operator_id WHERE e.batch_id=? ORDER BY e.id`, id)
 	defer rows.Close()
 	a := []gin.H{}
 	for rows.Next() {
+		var eid, fabricBlockNum int64
 		var t, s, dataHash, prev, tx, b, r, operator, organization string
-		var c interface{}
-		_ = rows.Scan(&t, &s, &dataHash, &prev, &tx, &b, &r, &operator, &organization, &c)
-		a = append(a, gin.H{"business_type": t, "business_summary": s, "data_hash": dataHash, "previous_hash": prev, "transaction_hash": tx, "block_hash": b, "operator_role": r, "operator_name": operator, "operator_organization": organization, "created_at": c})
+		var fabricStatus, fabricTxID, eventID string
+		var c, confirmedAt interface{}
+		_ = rows.Scan(&eid, &t, &s, &dataHash, &prev, &tx, &b, &r, &operator, &organization, &c,
+			&fabricStatus, &fabricTxID, &fabricBlockNum, &eventID, &confirmedAt)
+		a = append(a, gin.H{"id": eid, "business_type": t, "business_summary": s, "data_hash": dataHash, "previous_hash": prev, "transaction_hash": tx, "block_hash": b, "operator_role": r, "operator_name": operator, "operator_organization": organization, "created_at": c,
+			"fabric_status": fabricStatus, "fabric_tx_id": fabricTxID, "fabric_block_number": fabricBlockNum, "event_id": eventID, "confirmed_at": confirmedAt})
 	}
 	return a
 }

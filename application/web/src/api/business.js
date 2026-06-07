@@ -21,3 +21,9 @@ export const addCorrection = data => request({ url: '/corrections', method: 'pos
 export const traceDetail = code => request({ url: `/trace/${code}`, method: 'get' })
 export const evidence = () => request({ url: '/evidence', method: 'get' })
 export const nodes = id => request({ url: `/transport/${id}/nodes`, method: 'get' })
+
+// Fabric 存证管理接口
+export const verifyEvidence = id => request({ url: `/evidence/verify/${id}`, method: 'get' })
+export const retryEvidence = id => request({ url: '/evidence/retry', method: 'post', data: { id }})
+export const queryChainEvent = eventId => request({ url: `/evidence/chain/${eventId}`, method: 'get' })
+export const fabricStatus = () => request({ url: '/fabric/status', method: 'get' })

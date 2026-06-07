@@ -28,6 +28,7 @@ blockchain/network/log.txt
 blockchain/network/*.tar.gz
 blockchain/network/bin/
 blockchain/chaincode/vendor/
+blockchain/chaincode/**/vendor/
 application/backend/blockchain/network/organizations/
 blockchain/tape/tape
 blockchain/tape/Tape.log

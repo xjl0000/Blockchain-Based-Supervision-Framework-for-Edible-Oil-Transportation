@@ -52,6 +52,13 @@ func SetupRouter() *gin.Engine {
 		api.POST("/retail/decision", middleware.Roles("零售商"), con.RetailDecision)
 		api.POST("/corrections", middleware.Roles("原料供应商", "榨油厂", "运输人员", "零售商"), con.AddCorrection)
 
+		// Fabric 存证管理接口
+		api.GET("/evidence/verify/:id", middleware.Roles("原料供应商", "榨油厂", "运输人员", "零售商", "监管机构"), con.VerifyEvidence)
+		api.POST("/evidence/retry", middleware.Roles("监管机构", "系统管理员"), con.RetryEvidence)
+		api.GET("/evidence/chain/:event_id", middleware.Roles("原料供应商", "榨油厂", "运输人员", "零售商", "监管机构"), con.QueryChainEvent)
+		api.GET("/evidence/trace/:code", middleware.Roles("原料供应商", "榨油厂", "运输人员", "零售商", "监管机构"), con.QueryTraceChainEvents)
+		api.GET("/fabric/status", middleware.Roles("监管机构", "系统管理员"), con.FabricStatus)
+
 		api.GET("/admin/users", middleware.Roles("系统管理员"), con.ListUsers)
 		api.POST("/admin/users/status", middleware.Roles("系统管理员"), con.UpdateUserStatus)
 		api.GET("/admin/logs", middleware.Roles("系统管理员"), con.Logs)
