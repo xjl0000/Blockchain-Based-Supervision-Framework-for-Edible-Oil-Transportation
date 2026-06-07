@@ -1,14 +1,15 @@
 package pkg
 
 import (
+	"backend/blockchain"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,10 @@ func InitDB() error {
 		if _, err = DB.Exec(stmt); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}
+	}
+	// 运行 Fabric 字段增量迁移（对已存在的表添加新字段，忽略已存在错误）
+	for _, stmt := range fabricMigrations {
+		DB.Exec(stmt) // 忽略错误，字段可能已存在
 	}
 	return seedData()
 }
@@ -103,9 +108,21 @@ var schema = []string{
 	)`,
 	`CREATE TABLE IF NOT EXISTS evidence_records (
 		id BIGINT PRIMARY KEY AUTO_INCREMENT, batch_id BIGINT NULL, business_type VARCHAR(50) NOT NULL,
-		business_summary VARCHAR(255) NOT NULL, data_hash VARCHAR(64) NOT NULL, previous_hash VARCHAR(64) NOT NULL,
-		transaction_hash VARCHAR(64) UNIQUE NOT NULL, block_hash VARCHAR(64) UNIQUE NOT NULL,
+		business_summary VARCHAR(255) NOT NULL, data_hash VARCHAR(64) NOT NULL, previous_hash VARCHAR(64) NOT NULL DEFAULT '',
+		transaction_hash VARCHAR(64) NOT NULL DEFAULT '', block_hash VARCHAR(64) NOT NULL DEFAULT '',
 		operator_id BIGINT NOT NULL, operator_role VARCHAR(30) NOT NULL,
+		fabric_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		fabric_tx_id VARCHAR(128) NOT NULL DEFAULT '',
+		fabric_block_number BIGINT NOT NULL DEFAULT 0,
+		fabric_channel VARCHAR(50) NOT NULL DEFAULT '',
+		chaincode_name VARCHAR(50) NOT NULL DEFAULT '',
+		payload_json JSON NULL,
+		snapshot_json JSON NULL,
+		retry_count INT NOT NULL DEFAULT 0,
+		confirmed_at DATETIME NULL,
+		error_message TEXT NULL,
+		event_id VARCHAR(64) NOT NULL DEFAULT '',
+		trace_code VARCHAR(32) NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`,
 	`CREATE TABLE IF NOT EXISTS operation_logs (
@@ -119,46 +136,64 @@ var schema = []string{
 	)`,
 }
 
+// fabricMigrations 增量添加 Fabric 字段（对已存在的旧表安全执行）
+var fabricMigrations = []string{
+	"ALTER TABLE evidence_records DROP INDEX transaction_hash",
+	"ALTER TABLE evidence_records DROP INDEX block_hash",
+	"ALTER TABLE evidence_records ADD COLUMN fabric_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+	"ALTER TABLE evidence_records ADD COLUMN fabric_tx_id VARCHAR(128) NOT NULL DEFAULT ''",
+	"ALTER TABLE evidence_records ADD COLUMN fabric_block_number BIGINT NOT NULL DEFAULT 0",
+	"ALTER TABLE evidence_records ADD COLUMN fabric_channel VARCHAR(50) NOT NULL DEFAULT ''",
+	"ALTER TABLE evidence_records ADD COLUMN chaincode_name VARCHAR(50) NOT NULL DEFAULT ''",
+	"ALTER TABLE evidence_records ADD COLUMN payload_json JSON NULL",
+	"ALTER TABLE evidence_records ADD COLUMN snapshot_json JSON NULL",
+	"ALTER TABLE evidence_records ADD COLUMN retry_count INT NOT NULL DEFAULT 0",
+	"ALTER TABLE evidence_records ADD COLUMN confirmed_at DATETIME NULL",
+	"ALTER TABLE evidence_records ADD COLUMN error_message TEXT NULL",
+	"ALTER TABLE evidence_records ADD COLUMN event_id VARCHAR(64) NOT NULL DEFAULT ''",
+	"ALTER TABLE evidence_records ADD COLUMN trace_code VARCHAR(32) NOT NULL DEFAULT ''",
+}
+
 func seedData() error {
 	var count int
 	if err := DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil || count > 0 {
 		return err
 	}
-	users := []struct{ username, name, role, org string }{
-		{"admin", "徐文博", "系统管理员", "食用油运输监管平台运维中心"},
-		{"supplier", "刘建国", "原料供应商", "黑龙江北沃大豆种植专业合作社"},
-		{"supplier2", "李海峰", "原料供应商", "山东鲁丰花生种植合作社"},
-		{"factory", "周明远", "榨油厂", "中粮佳悦粮油工业有限公司"},
-		{"factory2", "高志远", "榨油厂", "山东鲁油食品工业有限公司"},
-		{"driver", "王志强", "运输人员", "安达恒泰食品运输有限公司"},
-		{"driver2", "马跃", "运输人员", "齐鲁食品物流有限公司"},
-		{"retailer", "赵雅琴", "零售商", "北京京粮放心粮油销售有限公司"},
-		{"retailer2", "陈晓敏", "零售商", "上海惠民粮油连锁有限公司"},
-		{"regulator", "陈国栋", "监管机构", "北京市市场监督管理局食品流通处"},
-		{"pending", "孙伟", "运输人员", "顺通食品运输服务有限公司"},
+	users := []struct{ username, name, role, org, phone, status string }{
+		{"admin", "徐文博", "系统管理员", "食用油运输监管平台运维中心（北京市海淀区中关村南大街12号）", "136 0108 5721", "approved"},
+		{"supplier", "刘建国", "原料供应商", "黑龙江北沃大豆种植专业合作社（绥化市北林区兴福镇兴福村）", "139 4555 2086", "approved"},
+		{"supplier2", "李海峰", "原料供应商", "山东鲁丰花生种植合作社（烟台市莱阳市照旺庄镇西陶漳村）", "138 5352 7619", "approved"},
+		{"factory", "周明远", "榨油厂", "中粮佳悦粮油工业有限公司（天津市滨海新区临港经济区渤海路36号）", "137 0206 4188", "approved"},
+		{"factory2", "高志远", "榨油厂", "山东鲁油食品工业有限公司（临沂市莒南县经济开发区淮海路88号）", "186 5391 6725", "approved"},
+		{"driver", "王志强", "运输人员", "安达恒泰食品运输有限公司（哈尔滨市道外区先锋路469号）", "158 0461 9037", "approved"},
+		{"driver2", "马跃", "运输人员", "齐鲁食品物流有限公司（济南市历城区工业北路221号）", "151 6918 4420", "approved"},
+		{"retailer", "赵雅琴", "零售商", "北京京粮放心粮油销售有限公司（北京市丰台区新发地食品产业园5号库）", "135 0127 6689", "approved"},
+		{"retailer2", "陈晓敏", "零售商", "上海惠民粮油连锁有限公司（上海市浦东新区航头镇航都路18号）", "189 1862 3056", "approved"},
+		{"regulator", "陈国栋", "监管机构", "北京市市场监督管理局食品流通处（北京市通州区留庄路6号院）", "010-8269 1732", "approved"},
+		{"pending", "孙伟", "运输人员", "顺通食品运输服务有限公司（石家庄市裕华区仓盛路99号）", "177 3118 9054", "pending"},
+		{"disabled", "何瑞华", "零售商", "华北优选商贸有限公司（保定市莲池区东风东路278号）", "133 3126 4408", "disabled"},
 	}
 	for _, u := range users {
-		status := "approved"
-		if u.username == "pending" {
-			status = "pending"
-		}
 		_, err := DB.Exec("INSERT INTO users(username,password,display_name,role,organization,phone,status) VALUES(?,?,?,?,?,?,?)",
-			u.username, HashPassword("123456"), u.name, u.role, u.org, "13800000000", status)
+			u.username, HashPassword("123456"), u.name, u.role, u.org, u.phone, u.status)
 		if err != nil {
 			return err
 		}
 	}
 	cases := []seedCase{
-		{code: "TR202606010001", material: "非转基因大豆", origin: "黑龙江省绥化市北林区", status: "completed", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
-		{code: "TR202606020002", material: "一级压榨花生仁", origin: "山东省青岛市莱西市", status: "in_transit", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
-		{code: "TR202606030003", material: "非转基因菜籽", origin: "四川省德阳市罗江区", status: "pending_factory", supplier: "supplier"},
-		{code: "TR202606030004", material: "高油酸花生仁", origin: "河南省开封市祥符区", status: "returned_supplier", supplier: "supplier", factory: "factory"},
-		{code: "TR202606040005", material: "非转基因大豆", origin: "黑龙江省佳木斯市桦川县", status: "factory_received", supplier: "supplier", factory: "factory"},
-		{code: "TR202606040006", material: "一级油菜籽", origin: "湖北省荆州市监利市", status: "processed", supplier: "supplier", factory: "factory"},
-		{code: "TR202606050007", material: "非转基因大豆", origin: "黑龙江省齐齐哈尔市", status: "pending_transport", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
-		{code: "TR202606050008", material: "一级葵花籽", origin: "内蒙古自治区巴彦淖尔市", status: "pending_retail", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
-		{code: "TR202605280009", material: "高油酸花生仁", origin: "山东省临沂市莒南县", status: "completed", supplier: "supplier2", factory: "factory2", driver: "driver2", retailer: "retailer2"},
-		{code: "TR202606060010", material: "一级花生仁", origin: "山东省烟台市莱阳市", status: "raw_draft", supplier: "supplier2"},
+		{code: "TR202605200001", material: "非转基因大豆", origin: "黑龙江省绥化市北林区兴福镇兴福村", quantity: 32.80, grade: "一级", report: "北林农检（2026）第0520186号：水分12.4%，杂质0.7%，农残未检出", status: "completed", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer", scenario: "corrected"},
+		{code: "TR202605230002", material: "高油酸花生仁", origin: "山东省临沂市莒南县大店镇花园村", quantity: 24.60, grade: "一级", report: "莒南质检（2026）第0523072号：酸价0.52mg/g，黄曲霉毒素B1未检出", status: "completed", supplier: "supplier2", factory: "factory2", driver: "driver2", retailer: "retailer2"},
+		{code: "TR202605270003", material: "一级葵花籽", origin: "内蒙古自治区巴彦淖尔市临河区白脑包镇", quantity: 27.35, grade: "一级", report: "临河农检（2026）第0527119号：含油率48.6%，水分8.1%", status: "pending_retail", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
+		{code: "TR202605290004", material: "非转基因大豆", origin: "黑龙江省齐齐哈尔市富裕县友谊乡", quantity: 30.20, grade: "一级", report: "富裕县农检（2026）第0529088号：蛋白质38.7%，水分12.1%", status: "in_transit", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
+		{code: "TR202605300005", material: "高油酸花生仁", origin: "山东省烟台市莱阳市照旺庄镇西陶漳村", quantity: 19.80, grade: "一级", report: "莱阳农检（2026）第0530045号：酸价0.61mg/g，水分6.3%", status: "in_transit", supplier: "supplier2", factory: "factory2", driver: "driver2", retailer: "retailer2", scenario: "retail_returned"},
+		{code: "TR202606010006", material: "非转基因大豆", origin: "黑龙江省佳木斯市桦川县悦来镇", quantity: 28.00, grade: "一级", report: "桦川质检（2026）第0601033号：转基因成分未检出，杂质0.6%", status: "transport_accepted", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
+		{code: "TR202606020007", material: "一级油菜籽", origin: "湖北省荆州市监利市尺八镇", quantity: 22.45, grade: "一级", report: "监利农检（2026）第0602168号：含油率43.2%，芥酸符合标准", status: "pending_transport", supplier: "supplier", factory: "factory", driver: "driver", retailer: "retailer"},
+		{code: "TR202606030008", material: "非转基因大豆", origin: "黑龙江省哈尔滨市双城区永胜镇", quantity: 26.75, grade: "一级", report: "双城农检（2026）第0603114号：水分12.0%，农残未检出", status: "processed", supplier: "supplier", factory: "factory"},
+		{code: "TR202606030009", material: "一级花生仁", origin: "山东省青岛市莱西市院上镇", quantity: 18.90, grade: "一级", report: "莱西质检（2026）第0603092号：黄曲霉毒素B1未检出", status: "processed", supplier: "supplier2", factory: "factory2", driver: "driver2", retailer: "retailer2", scenario: "transport_returned"},
+		{code: "TR202606040010", material: "非转基因菜籽", origin: "四川省德阳市罗江区鄢家镇", quantity: 21.60, grade: "二级", report: "罗江农检（2026）第0604058号：含油率39.8%，水分7.9%", status: "factory_received", supplier: "supplier", factory: "factory"},
+		{code: "TR202606050011", material: "高油酸花生仁", origin: "河南省开封市祥符区仇楼镇", quantity: 17.35, grade: "一级", report: "开封抽检（2026）第0605127号：复检水分9.4%，超出合同接收标准", status: "returned_supplier", supplier: "supplier2", factory: "factory2"},
+		{code: "TR202606060012", material: "非转基因大豆", origin: "黑龙江省绥化市兰西县榆林镇", quantity: 29.10, grade: "一级", report: "兰西农检（2026）第0606071号：水分12.2%，杂质0.8%", status: "pending_factory", supplier: "supplier"},
+		{code: "TR202606070013", material: "一级花生仁", origin: "山东省烟台市莱阳市万第镇", quantity: 16.80, grade: "一级", report: "待补充正式检验报告", status: "raw_draft", supplier: "supplier2"},
 	}
 	for index, item := range cases {
 		if err := seedBatch(item, time.Now().AddDate(0, 0, -(15-index))); err != nil {
@@ -169,7 +204,8 @@ func seedData() error {
 }
 
 type seedCase struct {
-	code, material, origin, status, supplier, factory, driver, retailer string
+	code, material, origin, grade, report, status, supplier, factory, driver, retailer, scenario string
+	quantity                                                                                     float64
 }
 
 type seedRoute struct {
@@ -181,15 +217,19 @@ type seedRoute struct {
 
 func routeForSeed(code, driver string) seedRoute {
 	routes := map[string]seedRoute{
-		"TR202606010001": {"黑龙江省", "哈尔滨市", "北京市", "北京市", "黑A·E6608", "王志强", 126.642464, 45.756967, 116.407526, 39.904030, 18, []RoutePoint{{126.642464, 45.756967}, {125.323544, 43.817071}, {124.350398, 43.166419}, {123.431474, 41.805698}, {121.127003, 41.095119}, {119.600492, 39.935385}, {118.180149, 39.630680}, {116.407526, 39.904030}}},
-		"TR202606020002": {"河北省", "秦皇岛市海港区", "河北省", "秦皇岛市山海关区", "冀C·QH218", "王志强", 119.600492, 39.935385, 119.775799, 39.978848, 10, []RoutePoint{{119.600492, 39.935385}, {119.637454, 39.942190}, {119.681104, 39.950858}, {119.727870, 39.966231}, {119.775799, 39.978848}}},
-		"TR202606050007": {"黑龙江省", "齐齐哈尔市", "广东省", "广州市", "黑B·L9086", "王志强", 123.918186, 47.354348, 113.264385, 23.129112, 24, []RoutePoint{{123.918186, 47.354348}, {125.103784, 46.589309}, {126.642464, 45.756967}, {125.323544, 43.817071}, {123.431474, 41.805698}, {117.200983, 39.084158}, {114.514859, 38.042306}, {113.625368, 34.746599}, {114.305392, 30.593098}, {112.938814, 28.228209}, {113.597522, 24.810403}, {113.264385, 23.129112}}},
-		"TR202606050008": {"内蒙古自治区", "巴彦淖尔市", "北京市", "北京市", "蒙L·Y7712", "王志强", 107.387657, 40.743213, 116.407526, 39.904030, 16, []RoutePoint{{107.387657, 40.743213}, {109.840347, 40.657449}, {111.749180, 40.842585}, {114.885895, 40.768931}, {116.407526, 39.904030}}},
-		"TR202605280009": {"山东省", "临沂市", "山东省", "青岛市", "鲁Q·F5309", "马跃", 118.356448, 35.104672, 120.382640, 36.067082, 12, []RoutePoint{{118.356448, 35.104672}, {119.526888, 35.416377}, {119.995518, 35.875138}, {120.197353, 35.960688}, {120.382640, 36.067082}}},
+		"TR202605200001": {"天津市", "滨海新区", "北京市", "丰台区", "津C·F6218", "王志强", 117.711913, 38.986438, 116.342820, 39.807650, 12, []RoutePoint{{117.711913, 38.986438}, {117.200983, 39.084158}, {116.838715, 39.726177}, {116.342820, 39.807650}}},
+		"TR202605230002": {"山东省", "临沂市", "上海市", "浦东新区", "鲁Q·R5309", "马跃", 118.356448, 35.104672, 121.667180, 31.032920, 18, []RoutePoint{{118.356448, 35.104672}, {119.161755, 34.589050}, {120.311910, 31.491170}, {121.667180, 31.032920}}},
+		"TR202605270003": {"天津市", "滨海新区", "北京市", "丰台区", "津C·M7712", "王志强", 117.711913, 38.986438, 116.342820, 39.807650, 10, []RoutePoint{{117.711913, 38.986438}, {117.200983, 39.084158}, {116.342820, 39.807650}}},
+		"TR202605290004": {"天津市", "滨海新区", "北京市", "丰台区", "津C·L9086", "王志强", 117.711913, 38.986438, 116.342820, 39.807650, 8, []RoutePoint{{117.711913, 38.986438}, {117.200983, 39.084158}, {116.342820, 39.807650}}},
+		"TR202605300005": {"山东省", "临沂市", "上海市", "浦东新区", "鲁Q·V8826", "马跃", 118.356448, 35.104672, 121.667180, 31.032920, 14, []RoutePoint{{118.356448, 35.104672}, {119.161755, 34.589050}, {120.311910, 31.491170}, {121.667180, 31.032920}}},
+		"TR202606010006": {"天津市", "滨海新区", "北京市", "丰台区", "津C·A6621", "王志强", 117.711913, 38.986438, 116.342820, 39.807650, 0, []RoutePoint{{117.711913, 38.986438}, {116.342820, 39.807650}}},
+		"TR202606020007": {"天津市", "滨海新区", "北京市", "丰台区", "津C·QH218", "王志强", 117.711913, 38.986438, 116.342820, 39.807650, 0, []RoutePoint{{117.711913, 38.986438}, {116.342820, 39.807650}}},
+		"TR202606030009": {"山东省", "临沂市", "上海市", "浦东新区", "鲁Q·K1735", "马跃", 118.356448, 35.104672, 121.667180, 31.032920, 0, []RoutePoint{{118.356448, 35.104672}, {121.667180, 31.032920}}},
 	}
 	route, ok := routes[code]
 	if !ok {
-		route = seedRoute{"河北省", "秦皇岛市", "北京市", "北京市", "冀C·S6621", driver, 119.520220, 39.888243, 116.407526, 39.904030, 14, DomesticRoute("秦皇岛市", "北京市", 119.520220, 39.888243, 116.407526, 39.904030)}
+		driverName := map[string]string{"driver": "王志强", "driver2": "马跃"}[driver]
+		route = seedRoute{"天津市", "滨海新区", "北京市", "丰台区", "津C·S6621", driverName, 117.711913, 38.986438, 116.342820, 39.807650, 10, DomesticRoute("滨海新区", "丰台区", 117.711913, 38.986438, 116.342820, 39.807650)}
 	}
 	return route
 }
@@ -265,11 +305,11 @@ func seedBatch(item seedCase, base time.Time) error {
 	hasProcessing := map[string]bool{"processed": true, "pending_transport": true, "transport_accepted": true, "in_transit": true, "pending_retail": true, "completed": true}[item.status]
 	processing := []byte("null")
 	if hasProcessing {
-		processing, _ = json.Marshal(map[string]interface{}{"product_name": productName, "process": "原料筛选、低温压榨、物理精炼、灌装封装", "production_batch": item.code + "-P", "production_time": base.Add(48 * time.Hour).Format("2006-01-02 15:04:05"), "inspection": "酸价、过氧化值、溶剂残留量检验合格"})
+		processing, _ = json.Marshal(map[string]interface{}{"product_name": productName, "process": "原料清理、磁选、低温压榨、物理精炼、氮气保护灌装", "production_batch": "SC-" + item.code[2:] + "-01", "production_time": base.Add(48 * time.Hour).Format("2006-01-02 15:04:05"), "inspection_report": "成品检验报告 CY-" + item.code[8:] + "：酸价、过氧化值、溶剂残留量均符合 GB/T 1535 要求", "quality_manager": "林雪梅"})
 	}
 	receipt := []byte("null")
 	if item.status == "completed" {
-		receipt, _ = json.Marshal(map[string]interface{}{"result": "确认收货", "quantity": 18.6, "received_time": base.Add(120 * time.Hour).Format("2006-01-02 15:04:05"), "quality": "铅封完整，包装无破损，随车检验报告核验通过", "warehouse": "食品级成品油专用仓"})
+		receipt, _ = json.Marshal(map[string]interface{}{"result": "确认收货", "quantity": math.Round(item.quantity*0.91*100) / 100, "received_time": base.Add(120 * time.Hour).Format("2006-01-02 15:04:05"), "quality": "罐体及铅封完整，随车检验报告与批次一致，抽检感官指标合格", "warehouse": "新发地食品产业园5号食品级成品油库", "receiver": "赵雅琴"})
 	}
 	var factoryID, driverID, retailerID interface{}
 	if item.factory != "" {
@@ -282,7 +322,7 @@ func seedBatch(item seedCase, base time.Time) error {
 		retailerID = ids[item.retailer]
 	}
 	res, err := DB.Exec(`INSERT INTO batches(trace_code,supplier_id,oil_factory_id,transporter_id,retailer_id,status,material_name,origin,quantity,unit,quality_grade,production_date,test_report,processing_data,receipt_data)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.code, ids[item.supplier], factoryID, driverID, retailerID, item.status, item.material, item.origin, 20, "吨", "一级", base.Add(-24*time.Hour).Format("2006-01-02"), "农残、酸价及水分检测合格", processing, receipt)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.code, ids[item.supplier], factoryID, driverID, retailerID, item.status, item.material, item.origin, item.quantity, "吨", item.grade, base.Add(-24*time.Hour).Format("2006-01-02"), item.report, processing, receipt)
 	if err != nil {
 		return err
 	}
@@ -305,7 +345,7 @@ func seedBatch(item seedCase, base time.Time) error {
 		return nil
 	}
 	_ = CreateEvidenceAt(batchID, "加工生产存证", "榨油厂提交加工生产信息", ids[item.factory], "榨油厂", base.Add(48*time.Hour))
-	if item.driver == "" || item.retailer == "" || item.status == "processed" {
+	if item.driver == "" || item.retailer == "" || (item.status == "processed" && item.scenario != "transport_returned") {
 		return nil
 	}
 	route := routeForSeed(item.code, item.driver)
@@ -322,7 +362,7 @@ func seedBatch(item seedCase, base time.Time) error {
 	}
 	res, err = DB.Exec(`INSERT INTO transport_tasks(batch_id,factory_id,transporter_id,retailer_id,vehicle_no,driver_name,product_name,product_quantity,start_province,start_city,start_lng,start_lat,end_province,end_city,end_lng,end_lat,status,note,created_at,started_at,completed_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		batchID, ids[item.factory], ids[item.driver], ids[item.retailer], route.vehicle, route.driverName, productName, 18.6,
+		batchID, ids[item.factory], ids[item.driver], ids[item.retailer], route.vehicle, route.driverName, productName, math.Round(item.quantity*0.91*100)/100,
 		route.startProvince, route.startCity, route.startLng, route.startLat, route.endProvince, route.endCity, route.endLng, route.endLat, taskStatus,
 		fmt.Sprintf("国内食品级专用罐车运输，%s至%s，全程铅封并记录定位及温湿度", route.startCity, route.endCity), base.Add(60*time.Hour), startedAt, completedAt)
 	if err != nil {
@@ -330,6 +370,13 @@ func seedBatch(item seedCase, base time.Time) error {
 	}
 	taskID, _ := res.LastInsertId()
 	_ = CreateEvidenceAt(batchID, "运输任务存证", "榨油厂发起运输任务", ids[item.factory], "榨油厂", base.Add(60*time.Hour))
+	if item.scenario == "transport_returned" {
+		reason := "承运车辆食品级罐体清洗证明已过有效期，运输人员退回任务"
+		_, _ = DB.Exec("INSERT INTO rejection_records(batch_id,stage,reason,operator_id,created_at) VALUES(?,'运输任务',?,?,?)", batchID, reason, ids[item.driver], base.Add(64*time.Hour))
+		_, _ = DB.Exec("DELETE FROM transport_tasks WHERE id=?", taskID)
+		_ = CreateEvidenceAt(batchID, "运输任务退回存证", "运输人员退回运输任务："+reason, ids[item.driver], "运输人员", base.Add(64*time.Hour))
+		return nil
+	}
 	if item.status == "pending_transport" {
 		return nil
 	}
@@ -343,12 +390,26 @@ func seedBatch(item seedCase, base time.Time) error {
 			taskID, i+1, point.Lng, point.Lat, 17.8+math.Sin(float64(i))*1.6, 49.0+math.Cos(float64(i))*4.0, base.Add(time.Duration(74+i*2)*time.Hour))
 	}
 	_ = CreateEvidenceAt(batchID, "运输过程存证", "运输人员上传运输轨迹及温湿度数据", ids[item.driver], "运输人员", base.Add(96*time.Hour))
+	if item.scenario == "retail_returned" {
+		_, _ = DB.Exec("UPDATE transport_tasks SET completed_at=? WHERE id=?", base.Add(108*time.Hour), taskID)
+		_ = CreateEvidenceAt(batchID, "运输完成存证", "运输任务完成，等待零售商收货", ids[item.driver], "运输人员", base.Add(108*time.Hour))
+		reason := "到货复核发现随车纸质检验报告缺少骑缝章，退回运输人员补正"
+		_, _ = DB.Exec("INSERT INTO rejection_records(batch_id,stage,reason,operator_id,created_at) VALUES(?,'零售收货',?,?,?)", batchID, reason, ids[item.retailer], base.Add(112*time.Hour))
+		_, _ = DB.Exec("UPDATE transport_tasks SET completed_at=NULL WHERE id=?", taskID)
+		_ = CreateEvidenceAt(batchID, "零售退回存证", "零售商退回产品："+reason, ids[item.retailer], "零售商", base.Add(113*time.Hour))
+		return nil
+	}
 	if item.status == "in_transit" {
 		return nil
 	}
 	_ = CreateEvidenceAt(batchID, "运输完成存证", "运输任务完成，等待零售商收货", ids[item.driver], "运输人员", base.Add(108*time.Hour))
 	if item.status == "completed" {
 		_ = CreateEvidenceAt(batchID, "零售收货存证", "零售商确认产品收货并填写入库核验信息", ids[item.retailer], "零售商", base.Add(120*time.Hour))
+	}
+	if item.scenario == "corrected" {
+		content := "补充原料采购合同编号：CG-2026-BW-0520，并说明不改变原始检测及运输数据"
+		_, _ = DB.Exec("INSERT INTO corrections(batch_id,stage,content,reason,operator_id,created_at) VALUES(?,'原料采购',?,?,?,?)", batchID, content, "归档复核时发现采购合同编号漏填", ids[item.supplier], base.Add(126*time.Hour))
+		_ = CreateEvidenceAt(batchID, "数据更正存证", "原料采购追加更正：归档复核时发现采购合同编号漏填", ids[item.supplier], "原料供应商", base.Add(126*time.Hour))
 	}
 	return nil
 }
@@ -373,15 +434,74 @@ func CreateEvidence(batchID int64, businessType, summary string, operatorID int6
 }
 
 func CreateEvidenceAt(batchID int64, businessType, summary string, operatorID int64, role string, createdAt time.Time) error {
-	payload := fmt.Sprintf("%d|%s|%s|%d|%d", batchID, businessType, summary, operatorID, createdAt.UnixNano())
-	dataHash := sha256Hex(payload)
+	// 1. 查找该批次的溯源码
+	var traceCode string
+	if batchID > 0 {
+		_ = DB.QueryRow("SELECT trace_code FROM batches WHERE id=?", batchID).Scan(&traceCode)
+	}
+
+	// 2. Build a deterministic snapshot of the complete SQL business data for
+	// this stage. The snapshot stays in MySQL; only its SHA-256 hash is on-chain.
+	snapshot, err := BuildEvidenceSnapshot(batchID, businessType, summary, operatorID, role, createdAt)
+	if err != nil {
+		return err
+	}
+	dataHash := blockchain.ComputePayloadHash(snapshot)
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+
+	// 3. 构建链上事件
+	offchainRef := fmt.Sprintf("batches:%d", batchID)
+	chainEvent := blockchain.BuildChainEvent(businessType, summary, dataHash, operatorID, role, traceCode, offchainRef)
+	eventJSON, _ := json.Marshal(chainEvent)
+
+	// 4. 仍然保留兼容哈希字段
 	previous := strings.Repeat("0", 64)
-	_ = DB.QueryRow("SELECT block_hash FROM evidence_records WHERE batch_id=? ORDER BY id DESC LIMIT 1", batchID).Scan(&previous)
-	txHash := sha256Hex("TX|" + dataHash + "|" + randomHex(8))
-	blockHash := sha256Hex(previous + "|" + txHash + "|" + strconv.FormatInt(createdAt.UnixNano(), 10))
-	_, err := DB.Exec(`INSERT INTO evidence_records(batch_id,business_type,business_summary,data_hash,previous_hash,transaction_hash,block_hash,operator_id,operator_role,created_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?)`, nullableBatch(batchID), businessType, summary, dataHash, previous, txHash, blockHash, operatorID, role, createdAt)
-	return err
+	_ = DB.QueryRow("SELECT COALESCE(data_hash,'') FROM evidence_records WHERE batch_id=? ORDER BY id DESC LIMIT 1", batchID).Scan(&previous)
+	if previous == "" {
+		previous = strings.Repeat("0", 64)
+	}
+
+	// 5. 写入 MySQL，状态为 pending
+	res, err := DB.Exec(`INSERT INTO evidence_records(batch_id,business_type,business_summary,data_hash,previous_hash,
+		transaction_hash,block_hash,operator_id,operator_role,fabric_status,payload_json,snapshot_json,event_id,trace_code,created_at)
+		VALUES(?,?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)`,
+		nullableBatch(batchID), businessType, summary, dataHash, previous,
+		"", "", operatorID, role, string(eventJSON), string(snapshotJSON), chainEvent.EventID, traceCode, createdAt)
+	if err != nil {
+		return err
+	}
+	recordID, _ := res.LastInsertId()
+
+	// 6. 异步提交 Fabric 交易
+	go func() {
+		if !blockchain.GetGateway().IsEnabled() {
+			log.Printf("[Fabric] 离线模式，记录 %d 保持 pending 状态", recordID)
+			return
+		}
+
+		result, err := blockchain.SubmitEvent(chainEvent, role)
+		if err != nil {
+			log.Printf("[Fabric] 记录 %d 上链失败: %v", recordID, err)
+			DB.Exec(`UPDATE evidence_records SET fabric_status='failed',
+				error_message=?, retry_count=1 WHERE id=?`, err.Error(), recordID)
+			return
+		}
+
+		// 上链成功，更新记录
+		DB.Exec(`UPDATE evidence_records SET fabric_status='confirmed',
+			fabric_tx_id=?, fabric_block_number=?,
+			fabric_channel=?, chaincode_name=?,
+			transaction_hash=?, confirmed_at=NOW(), error_message=NULL WHERE id=?`,
+			result.TxID, result.BlockNumber,
+			"oiltracechannel", "oiltrace",
+			result.TxID, recordID)
+		log.Printf("[Fabric] 记录 %d 上链成功: txID=%s, block=%d", recordID, result.TxID, result.BlockNumber)
+	}()
+
+	return nil
 }
 
 func sha256Hex(value string) string {

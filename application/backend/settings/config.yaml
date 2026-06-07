@@ -10,3 +10,26 @@ mysql:
   user: "root"
   password: "oiltrace"
   db: "oil_supervision"
+fabric:
+  enabled: true
+  channel: "oiltracechannel"
+  chaincode: "oiltrace"
+  org1:
+    msp_id: "Org1MSP"
+    crypto_path: "../../blockchain/network/organizations/peerOrganizations/org1.example.com"
+    cert_path: "users/User1@org1.example.com/msp/signcerts/User1@org1.example.com-cert.pem"
+    key_path: "users/User1@org1.example.com/msp/keystore/"
+    tls_cert_path: "peers/peer0.org1.example.com/tls/ca.crt"
+    peer_endpoint: "localhost:7051"
+    gateway_peer: "peer0.org1.example.com"
+  org2:
+    msp_id: "Org2MSP"
+    crypto_path: "../../blockchain/network/organizations/peerOrganizations/org2.example.com"
+    cert_path: "users/User1@org2.example.com/msp/signcerts/User1@org2.example.com-cert.pem"
+    key_path: "users/User1@org2.example.com/msp/keystore/"
+    tls_cert_path: "peers/peer0.org2.example.com/tls/ca.crt"
+    peer_endpoint: "localhost:9051"
+    gateway_peer: "peer0.org2.example.com"
+  retry:
+    interval_seconds: 30
+    max_retries: 5
